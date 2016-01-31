@@ -1,0 +1,112 @@
+---
+title: "Machine Learning Prediction Assignment Writeup"
+author: "Jackson Tan"
+date: "January 31, 2016"
+output: html_document
+---
+
+## Summary
+In this assignment, the Author has did the analysis on the provided data, to determine the activity that perform from an individual. The Author has use the caret and randomForest to predict the correct anwser for the 20 test data cases.
+The objective of this is to predict the manner in which they did the exercise.
+The data for this project come from http://groupware.les.inf.puc-rio.br/har.
+
+## Data Cleaning
+```{r}
+library(Hmisc)
+library(caret)
+library(randomForest)
+library(foreach)
+library(doParallel)
+set.seed(2048)
+options(warn=-1)
+```
+
+There are two data set were available, which are training set and a test set. The author load the data set and replace the value contained "#DIV/0" with NA value.
+
+```{r}
+training_data <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
+testing_data <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+```
+
+# Data Exploring
+```{r}
+dim(training_data)
+```
+
+```{r}
+table(training_data$classe)
+```
+
+The author change all columns 8 to numeric.
+
+```{r}
+for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))}
+
+for(i in c(8:ncol(testing_data)-1)) {testing_data[,i] = as.numeric(as.character(testing_data[,i]))}
+```
+
+The author has removed the columns that did not related to prediction, and set the features to the useful column.
+
+
+To determine and display out features set.
+
+```{r}
+features <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(1:7)]
+model <- training_data[features]
+features
+```
+
+The model data that built from the features set.
+
+```{r}
+data <- createDataPartition(y=model$classe, p=0.75, list=FALSE )
+training <- model[data,]
+testing <- model[-data,]
+```
+
+The author has use parallel processing to buid the model, where build 5 random forest with 150 trees each.
+
+```{r}
+registerDoParallel()
+x <- training[-ncol(training)]
+y <- training$classe
+
+rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+randomForest(x, y, ntree=ntree) 
+}
+```
+
+Provide error reports for training and test data.
+```{r}
+predict1 <- predict(rf, newdata=training)
+confusionMatrix(predict1,training$classe)
+
+
+predict2 <- predict(rf, newdata=testing)
+confusionMatrix(predict2,testing$classe)
+```
+
+Result and Conclusions 
+----------------------
+
+Author has use testing data to evaluate the performance of the model. Based on the confusion matrix, the model has shown the very accurate test data result. The accuracy is 0.994. It shown the overall of the result is accepted.
+
+The function to generate the files with predictions to submit for assignment.
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+
+x <- testing_data
+x <- x[features[features!='classe']]
+answers <- predict(rf, newdata=x)
+
+answers
+
+pml_write_files(answers)
+```
